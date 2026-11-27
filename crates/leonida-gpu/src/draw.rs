@@ -2740,7 +2740,21 @@ impl State {
         };
         let depth = match role {
             Role::Resolve => {
-                let Some((seen, depth)) = entry(ResourceType::Srv, DEPTH) else {
+                // Where the title binds only the stencil at that place, the
+                // depth is another view it reads: of a depth target the size
+                // of the image.
+                let of_depth = |(desc, _): &(D3D12_RESOURCE_DESC, D3D12_GPU_DESCRIPTOR_HANDLE)| {
+                    desc.Flags.0 & D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL.0 != 0
+                        && (desc.Width, desc.Height) == (of.Width, of.Height)
+                };
+                let found = entry(ResourceType::Srv, DEPTH).or_else(|| {
+                    t.used
+                        .iter()
+                        .filter(|u| u.kind == ResourceType::Srv && u.root == RootType::Table)
+                        .filter_map(|u| entry(ResourceType::Srv, (u.slot, u.table_offset_dwords)))
+                        .find(of_depth)
+                });
+                let Some((seen, depth)) = found else {
                     once!(?role, "no stand-in for the indirect light: no depth at its place");
                     return false;
                 };
