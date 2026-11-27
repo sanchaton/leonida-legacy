@@ -2712,7 +2712,7 @@ impl State {
                 // The stencil of a depth (a 2D view of plane 1, or a format
                 // that reads only the stencil) holds no depth.
                 (ResourceType::Srv, View::Shader(_, Some(d)))
-                    if (d[1] == 4 && d[6] != 0) || matches!(d[0], 21 | 47) =>
+                    if (d[1] == 4 && d[6] != 0) || matches!(d[0], 22 | 47) =>
                 {
                     return None;
                 }
