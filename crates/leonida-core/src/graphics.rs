@@ -26,6 +26,7 @@ pub struct GraphicsSettings {
     /// Omitted: match the adapter. Empty or containing `none`: apply no profiles.
     pub profiles: Option<Vec<String>>,
     pub async_submit: Option<bool>,
+    pub async_present: Option<bool>,
     pub queue2: Option<u8>,
     pub indirect_window: Option<bool>,
     pub copy_plain: Option<bool>,
@@ -71,6 +72,7 @@ impl GraphicsSettings {
         let mut values = Environment::new();
         for (name, value) in [
             ("ASYNC_SUBMIT", self.async_submit),
+            ("ASYNC_PRESENT", self.async_present),
             ("INDIRECT_WINDOW", self.indirect_window),
             ("COPY_PLAIN", self.copy_plain),
             ("JOIN_PARTS", self.join_parts),
@@ -583,6 +585,27 @@ mod tests {
         assert_eq!(plan.settings["LEONIDA_CARD_WINDOWS_MB"], "3072");
         assert_eq!(plan.settings["LEONIDA_WINDOW_UPLOAD"], "1");
         assert_eq!(plan.settings["LEONIDA_TEXTURE_ROOM_PERCENT"], "70");
+    }
+
+    #[test]
+    fn async_present_maps_and_environment_wins() {
+        let settings = GraphicsSettings {
+            async_present: Some(true),
+            ..Default::default()
+        };
+        let plan = resolve(&settings, gpu(), &env(&[]), None).unwrap();
+        assert_eq!(plan.settings["LEONIDA_ASYNC_PRESENT"], "1");
+        assert_eq!(plan.sources["LEONIDA_ASYNC_PRESENT"], "config");
+
+        let plan = resolve(
+            &settings,
+            gpu(),
+            &env(&[("LEONIDA_ASYNC_PRESENT", "0")]),
+            None,
+        )
+        .unwrap();
+        assert_eq!(plan.settings["LEONIDA_ASYNC_PRESENT"], "0");
+        assert_eq!(plan.sources["LEONIDA_ASYNC_PRESENT"], "environment");
     }
 
     #[test]

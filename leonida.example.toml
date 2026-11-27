@@ -29,6 +29,7 @@ test_titles = []
 
 # Leave a setting commented to use its profile value. false explicitly turns it off.
 # async_submit = true          # LEONIDA_ASYNC_SUBMIT
+# async_present = true         # LEONIDA_ASYNC_PRESENT
 # queue2 = 1                   # LEONIDA_QUEUE2: 0..3, copy-queue bit mask
 # indirect_window = true       # LEONIDA_INDIRECT_WINDOW
 # copy_plain = true            # LEONIDA_COPY_PLAIN
