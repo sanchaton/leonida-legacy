@@ -61,6 +61,9 @@ pub(crate) struct Shader {
     /// The first 8 bytes of its BLAKE3, as logged.
     pub(crate) hash: String,
     container: Vec<u8>,
+    /// Its part in the stand-in for the indirect light (`crate::ambient`).
+    #[cfg(windows)]
+    pub(crate) ambient: Option<crate::ambient::Role>,
     #[cfg(windows)]
     translated: OnceLock<Option<Translated>>,
     /// Whether its code walks the ray-tracing structures, once looked at
@@ -111,9 +114,14 @@ fn shader(stage: &'static str, bytes: &[u8]) -> Arc<Shader> {
         .or_insert_with(|| {
             KEPT[0].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             KEPT[1].fetch_add(bytes.len() as u64, std::sync::atomic::Ordering::Relaxed);
+            let hash = full.to_hex()[..16].to_owned();
             Arc::new(Shader {
                 stage,
-                hash: full.to_hex()[..16].to_owned(),
+                #[cfg(windows)]
+                ambient: (stage == "compute")
+                    .then(|| crate::ambient::role(&hash, bytes))
+                    .flatten(),
+                hash,
                 container: bytes.to_vec(),
                 #[cfg(windows)]
                 translated: OnceLock::new(),
@@ -354,6 +362,13 @@ pub(crate) fn walk_held(this: This) -> bool {
 #[cfg(windows)]
 pub(crate) fn is_builder(this: This) -> bool {
     !this.is_null() && pipeline(this).builder
+}
+
+/// Whether the structure builder has run whole: the title's rays find what
+/// it built. Unlike [`builder_runs`] it changes nothing.
+#[cfg(windows)]
+pub(crate) fn builder_whole() -> bool {
+    BUILDER.lock().unwrap_or_else(|e| e.into_inner()).whole
 }
 
 /// A stage of the builder was dropped after all: none runs from here on.

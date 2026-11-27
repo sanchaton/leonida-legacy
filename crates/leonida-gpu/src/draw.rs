@@ -522,6 +522,10 @@ pub(crate) struct State {
     /// command before this one on the list.
     #[cfg(feature = "diagnostics")]
     last_indirect: (u64, u64),
+    /// The tables the last bind made afresh for a program the stand-in for
+    /// the indirect light follows (`crate::ambient`): root parameter, bytes
+    /// into the view heap.
+    ambient_tables: Vec<(u8, u32)>,
     /// What the host list has: pipeline, root signature, heaps.
     host_pipeline: usize,
     /// Graphics, compute.
@@ -1306,6 +1310,10 @@ impl State {
             if made.iter().any(|m| m.1 == u32::MAX) {
                 once!("a draw whose descriptor table found no free slots is dropped");
                 return false;
+            }
+            if stage.shader.ambient.is_some() {
+                self.ambient_tables.clear();
+                self.ambient_tables.extend(made.iter().copied());
             }
             // What the shader stores through root views and raw addresses is
             // copied back into title memory afterwards.
@@ -2636,6 +2644,7 @@ impl State {
             );
             if ran {
                 DISPATCHED.fetch_add(1, Ordering::Relaxed);
+                self.after_dispatch(list, p);
             } else {
                 DROPPED.fetch_add(1, Ordering::Relaxed);
                 if crate::pipeline::is_builder(self.pipeline as This) {
@@ -2658,6 +2667,108 @@ impl State {
         // SAFETY: an open list with everything set.
         unsafe { list.list.Dispatch(x, y, z) };
         DISPATCHED.fetch_add(1, Ordering::Relaxed);
+        self.after_dispatch(list, p);
+    }
+
+    /// The stand-in for the indirect light after a dispatch of `p`, if it
+    /// follows that program (`crate::ambient`). What it set on the host list
+    /// is set again by the next bind.
+    fn after_dispatch(&mut self, list: &HostList, p: &HostPipeline) {
+        if let Some(role) = p.stages.first().and_then(|s| s.shader.ambient)
+            && crate::ambient::on()
+            && self.ambient(list, p, role)
+        {
+            self.host_pipeline = 0;
+            self.host_roots[1] = 0;
+        }
+    }
+
+    /// The stand-in for the indirect light after a dispatch of `p`
+    /// (`crate::ambient`). Whether it recorded anything.
+    fn ambient(&self, list: &HostList, p: &HostPipeline, role: crate::ambient::Role) -> bool {
+        use crate::ambient::{AIR, DEPTH, LIGHT, RADIANCE, Role, Views};
+        let Some(t) = p.stages.first().map(|s| s.translated()) else {
+            return false;
+        };
+        let Some(heap) = (self.heaps[0] != 0)
+            .then(|| crate::descriptor::heap(self.heaps[0] as This).host())
+            .flatten()
+        else {
+            return false;
+        };
+        // The view at that place of the program's tables, of the kind its
+        // code reads there: its resource's description and the view's
+        // handle in the host heap.
+        let entry = |kind: ResourceType, (slot, offset): (u8, u32)| {
+            t.used.iter().find(|u| {
+                u.kind == kind
+                    && u.root == RootType::Table
+                    && (u.slot, u.table_offset_dwords) == (slot, offset)
+            })?;
+            let Some(Root::Table(table)) = self.roots_ref(true).get(usize::from(slot)) else {
+                return None;
+            };
+            let resource = match (kind, crate::descriptor::view(table + u64::from(offset) * 4)?) {
+                // The stencil of a depth (a 2D view of plane 1, or a format
+                // that reads only the stencil) holds no depth.
+                (ResourceType::Srv, View::Shader(_, Some(d)))
+                    if (d[1] == 4 && d[6] != 0) || matches!(d[0], 21 | 47) =>
+                {
+                    return None;
+                }
+                (ResourceType::Srv, View::Shader(r, _))
+                | (ResourceType::Uav, View::Unordered(r, ..)) => r,
+                _ => return None,
+            };
+            let start = match self.ambient_tables.iter().find(|m| m.0 == slot) {
+                Some(m) => m.1,
+                None => self.user_value(true, slot, RootType::Table, 0),
+            };
+            let host = crate::resource::host_resource(resource as This)?;
+            // SAFETY: a live resource.
+            let desc = unsafe { host.GetDesc() };
+            Some((desc, heap.gpu_handle((start + offset * 4) / 32)))
+        };
+        let at = match role {
+            Role::Resolve => LIGHT,
+            Role::Radiance => RADIANCE,
+            Role::Air => AIR,
+        };
+        let Some((of, image)) = entry(ResourceType::Uav, at) else {
+            once!(?role, "no stand-in for the indirect light: no image at its place");
+            return false;
+        };
+        let depth = match role {
+            Role::Resolve => {
+                let Some((seen, depth)) = entry(ResourceType::Srv, DEPTH) else {
+                    once!(?role, "no stand-in for the indirect light: no depth at its place");
+                    return false;
+                };
+                if (seen.Width, seen.Height) != (of.Width, of.Height) {
+                    once!(?role, "no stand-in for the indirect light: a depth of another size");
+                    return false;
+                }
+                Some(depth)
+            }
+            Role::Radiance | Role::Air => None,
+        };
+        // (R32_UINT holding R9G9B9E5; R11G11B10_FLOAT.)
+        let format = if role == Role::Resolve { 42 } else { 26 };
+        let volume = of.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D;
+        if of.Format.0 != format || volume != (role == Role::Air) {
+            once!(?role, format = of.Format.0, "no stand-in for the indirect light: another image");
+            return false;
+        }
+        crate::ambient::after(
+            list,
+            role,
+            &Views {
+                image,
+                depth,
+                size: [of.Width as u32, of.Height],
+                slices: u32::from(of.DepthOrArraySize),
+            },
+        )
     }
 
     /// What a draw or dispatch runs, for the device-removed report
