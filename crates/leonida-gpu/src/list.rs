@@ -198,6 +198,11 @@ impl Detached {
     pub(crate) fn host(&self) -> &crate::host::HostList {
         &self.host
     }
+
+    #[cfg(all(test, feature = "diagnostics"))]
+    pub(crate) fn for_test(host: crate::host::HostList) -> Self {
+        Self { host, _uploads: Vec::new(), _state: crate::draw::State::default() }
+    }
 }
 
 /// A host list that has run and waits to be used again, and the bytes of

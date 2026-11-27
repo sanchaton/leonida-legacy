@@ -5,6 +5,40 @@ The status summary is in [README.md](../README.md).
 
 ## Newest (2026-11-26)
 
+**Wait for texture readbacks before preparing dependent submissions.**
+Ordinary texture-to-buffer copies were missing from the ranges tracked while
+submissions were in flight. A later submission's CPU-side buffer copy could
+therefore consume stale title memory before the earlier texture readback landed.
+The pending ranges now include the bytes actually written by each readback row,
+excluding pitch padding. Overlapping CPU reads and writes wait for these definite
+writes even when speculative shader fills are enabled; unrelated work can proceed.
+The ranges remain pending until CPU copy-back completes, including when the relay
+lands only part of the queue.
+
+An original one-texel D3D12 regression holds the first submission behind a fence
+and queues a dependent copy in a second submission. It releases the fence when
+the consumer enters the dependency wait, or after the old implementation has
+copied stale bytes; timing does not choose the outcome. On `63fb0e8` with the test
+only, the destination is 0 instead of 37 in all three `LEONIDA_RELAY=0/1/2` modes.
+With the fix it is 37 in all three modes, with `LEONIDA_LATE_WAIT=3`, queue2 and
+the default speculative-fill path enabled. Measured on an Intel Core i9-14900KS,
+RTX 5090, NVIDIA 580.173.02, Pop!_OS 22.04, Proton 11's Wine and vkd3d-proton 3.2.
+Five CPU tests also cover row padding, destination overwrites, empty and
+overflowing footprints, and retaining later flights' pending ranges.
+
+Run the optional test alone in a fresh diagnostics test process with
+`LEONIDA_TEST_READBACK_ORDER=1`, `LEONIDA_LATE_WAIT=3`, the desired
+`LEONIDA_RELAY` value, and either `LEONIDA_D3D12_WARP=1` or the explicit hardware
+opt-in `LEONIDA_TEST_READBACK_HARDWARE=1`:
+`cargo test -p leonida-gpu --features diagnostics --locked
+host::readback_order_tests::later_submission_copies_texture_readback_after_completion
+-- --exact --nocapture --test-threads=1`.
+
+This orders separate submissions only. Dependencies between commands already
+grouped in one submission still need command-list splitting. This synthetic
+correctness result does not establish the cause of the washed-out game frames
+or claim a gameplay or frame-rate improvement.
+
 **R-7: buffer view addresses by view heap slot.**
 The 5 `CS_TraceShadowRays_*` compute programs ("a descriptor read only as
 data") load a buffer descriptor from the view heap at an index they compute
