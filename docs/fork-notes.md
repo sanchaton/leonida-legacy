@@ -5,7 +5,11 @@ The status summary is in [README.md](../README.md).
 
 ## Newest (2026-11-26)
 
-**Wait for texture readbacks before preparing dependent submissions.**
+**Wait for texture readbacks before preparing dependent submissions
+(`LEONIDA_READBACK_ORDER=1`, opt-in profile `readback-order`).**
+Off by default until a `scripts\measure-run.ps1` pair shows no frame-time
+cost: with it on, a `Run` step waits while any readback is still pending,
+wherever it writes. With it off, submissions wait exactly as before.
 Ordinary texture-to-buffer copies were missing from the ranges tracked while
 submissions were in flight. A later submission's CPU-side buffer copy could
 therefore consume stale title memory before the earlier texture readback landed.

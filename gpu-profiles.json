@@ -49,6 +49,13 @@
       "match": {},
       "measured": "RTX 3080 12 GB, Ryzen 7 7800X3D, driver 621.24, first rooms, two pairs of unattended runs, 2026-11-26: usual frame 156.5 -> 142 and 145 -> 130.5 ms; host copies of textures made again 14,986 -> 8,545 and 17,149 -> 5,674; but passes that made none for lack of room 96 -> 319 and 12 -> 390. Opt-in until measured on more cards.",
       "env": { "LEONIDA_TEXTURE_KEEP": "1" }
+    },
+    {
+      "name": "readback-order",
+      "opt_in": true,
+      "match": {},
+      "measured": "Correctness only: a one-texel D3D12 regression (docs/fork-notes.md) copies 37 instead of 0 in LEONIDA_RELAY=0/1/2 on an RTX 5090. No frame times yet: opt-in until a scripts/measure-run.ps1 pair shows no cost.",
+      "env": { "LEONIDA_READBACK_ORDER": "1" }
     }
   ]
 }
