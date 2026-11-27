@@ -46,7 +46,7 @@
         "min_vram_mb": 7000,
         "max_vram_mb": 8600
       },
-      "measured": "RTX 3060 Ti 8 GB, Ryzen 5 5600, 16 GB, driver 621.40, Windows 11 26H2, first gameplay room Series X after the shader warm-up with 512 MB texture staging, 2026-11-27: two pairs of runs, usual frame 175 and 183 ms without LEONIDA_ASYNC_PRESENT, 127 and 139 ms with it; copy-back thread waited 82.5 ms without and 54.5 ms with. Opt-in until measured on other 8 GB cards. See docs/fork-notes.md, asynchronous present on 8 GB.",
+      "measured": "RTX 3060 Ti 8 GB, Ryzen 5 5600, 16 GB, driver 621.40, Windows 11 26H2, first gameplay room Series X after the shader warm-up with 512 MB texture staging, 2026-11-27: two pairs of runs, usual frame 175 and 183 ms without LEONIDA_ASYNC_PRESENT, 127 and 139 ms with it; copy-back thread waited 82.5 ms without and 54.5 ms with. Opt-in until measured on other 8 GB cards. See docs/notes/2026-11-27-nvidia-8gb-async-present.md.",
       "env": {
         "LEONIDA_ASYNC_PRESENT": "1"
       }
